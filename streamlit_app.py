@@ -17,7 +17,6 @@ st.write("The Name on your smoothie will be: ", name_on_order)
 cnx = st.connection("snowflake")
 session = cnx.session()
 my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
-
 pd_df = my_dataframe.to_pandas()
 
 ingredients_list = st.multiselect(
@@ -29,7 +28,10 @@ if ingredients_list:
     ingredients_string = ''
     
     for fruit_chosen in ingredients_list:
-        ingredients_string += fruit_chosen + ''
+        # Fix 1: Add space between ingredients (this might be the issue)
+        if ingredients_string:
+            ingredients_string += ' '  # Add space between fruits
+        ingredients_string += fruit_chosen
         
         # Fix: Add error handling for the search_on lookup
         try:
@@ -57,11 +59,52 @@ if ingredients_list:
         except requests.exceptions.RequestException as e:
             st.error(f"Error fetching nutrition data for {fruit_chosen}: {str(e)}")
     
+    # DEBUG: Show what the ingredients string looks like
+    st.write("DEBUG - Ingredients string:", repr(ingredients_string))
+    st.write("DEBUG - Ingredients string length:", len(ingredients_string))
+    
+    # Test different formatting options
+    test_formats = {
+        "Current format": ingredients_string,
+        "No spaces": ''.join(ingredients_list),
+        "Space separated": ' '.join(ingredients_list),
+        "Stripped": ingredients_string.strip(),
+        "Uppercase": ingredients_string.upper(),
+        "Lowercase": ingredients_string.lower()
+    }
+    
+    for format_name, format_string in test_formats.items():
+        st.write(f"DEBUG - {format_name}: '{format_string}' (length: {len(format_string)})")
+    
     # Only proceed if we have ingredients and a name
     if ingredients_string.strip() and name_on_order.strip():
+        # Try multiple format options to see which one produces the right hash
+        st.write("**Testing different ingredient formats:**")
+        
+        for format_name, format_string in test_formats.items():
+            test_stmt = f"SELECT HASH('{format_string}') AS hash_value"
+            try:
+                hash_result = session.sql(test_stmt).collect()
+                hash_value = hash_result[0]['HASH_VALUE']
+                st.write(f"{format_name}: `{format_string}` → Hash: `{hash_value}`")
+                
+                # Check if this matches any expected values
+                expected_hashes = {
+                    7976616299844859825: "Kevin's expected",
+                    -6112358379204300652: "Divya's expected", 
+                    10169248411318185535: "Xi's expected"
+                }
+                
+                if hash_value in expected_hashes:
+                    st.success(f"✅ MATCH! {format_name} produces {expected_hashes[hash_value]} hash!")
+                    
+            except Exception as e:
+                st.error(f"Error testing {format_name}: {str(e)}")
+        
+        # Use the original format for now
         my_insert_stmt = """ insert into smoothies.public.orders(ingredients, name_on_order)
                 values ('""" + ingredients_string.strip() + """', '""" + name_on_order + """')"""
-        st.write(my_insert_stmt)
+        st.write("SQL Statement:", my_insert_stmt)
         
         time_to_insert = st.button('Submit Order')
         if time_to_insert:
