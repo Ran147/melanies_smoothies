@@ -29,7 +29,7 @@ if ingredients_list:
     ingredients_string = ''
     
     for fruit_chosen in ingredients_list:
-        ingredients_string += fruit_chosen + ' '
+        ingredients_string += fruit_chosen + ''
         
         # Fix: Add error handling for the search_on lookup
         try:
